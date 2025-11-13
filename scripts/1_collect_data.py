@@ -5,19 +5,19 @@ import csv
 import numpy as np
 import time
 
-# Configurações
+# --- CAMINHOS E CONFIGURAÇÕES ---
 # Obtém o caminho absoluto para o diretório onde o script está localizado
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')
 
-# Letras para coletar
-LETTERS_TO_COLLECT = 'ABCDEFGILM'
-# Número de amostras por letra
-NUM_SAMPLES = 40
-# Arquivo CSV para salvar os dados
+# Alfabeto completo de Libras
+LETTERS_TO_COLLECT = 'ABCDEFGHIJKLMNOPQRSTUVWXYZÇ'
+NUM_SAMPLES = 40 # 40 amostras por letra
+PREPARATION_TIME = 10 # 10 segundos para se preparar
+
 CSV_FILE = os.path.join(DATA_DIR, 'libras_data.csv')
 
-# Inicialização
+# --- INICIALIZAÇÃO --
 # Cria o diretório de dados se não existir
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
@@ -29,6 +29,9 @@ mp_drawing = mp.solutions.drawing_utils
 
 # Abre a webcam
 cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Erro: Não foi possível abrir a câmera.")
+    exit()
 
 # Flag para saída do programa
 quit_program = False
@@ -43,21 +46,23 @@ try:
 
         # Loop principal para cada letra
         for letter in LETTERS_TO_COLLECT:
-            letter_data = []
-            sample_count = 0
-
             print(f"Coletando dados para a letra: '{letter}'")
 
             # Pausa para o usuário se preparar
-            for i in range(5, 0, -1):
+            for i in range(PREPARATION_TIME, 0, -1):
                 ret, frame = cap.read()
                 if not ret: continue
                 frame = cv2.flip(frame, 1)
                 cv2.putText(frame, f"Prepare-se para a letra '{letter}'... {i}", (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3, cv2.LINE_AA)
                 cv2.imshow('Coleta de Dados', frame)
-                cv2.waitKey(1000)
+                if cv2.waitKey(1000) & 0xFF == ord('q'):
+                    quit_program = True
+                    break
+            if quit_program: break
 
             # Loop de coleta para a letra atual
+            letter_data = []
+            sample_count = 0
             while sample_count < NUM_SAMPLES:
                 ret, frame = cap.read()
                 if not ret:
@@ -71,43 +76,34 @@ try:
                 # Desenha as instruções na tela
                 cv2.putText(frame, f"LETRA: {letter}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
                 cv2.putText(frame, f"AMOSTRAS: {sample_count}/{NUM_SAMPLES}", (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-                cv2.putText(frame, "Pressione 'K' para capturar", (50, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
 
                 if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                    mp_drawing.draw_landmarks(frame, results.multi_hand_landmarks[0], mp_hands.HAND_CONNECTIONS)
 
-                cv2.imshow('Coleta de Dados', frame)
-
-                key = cv2.waitKey(25) & 0xFF
-                if key == ord('k') and results.multi_hand_landmarks:
-                    # Extrai os landmarks da primeira mão detectada
+                    # Extrai, adiciona à lista de memória e incrementa
                     landmarks = np.array([[lm.x, lm.y, lm.z] for lm in results.multi_hand_landmarks[0].landmark]).flatten().tolist()
                     letter_data.append([letter] + landmarks)
                     sample_count += 1
+                    cv2.putText(frame, "COLETANDO...", (50, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
 
-                    # Feedback visual de captura
-                    frame_copy = frame.copy()
-                    cv2.putText(frame_copy, "SALVO!", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
-                    cv2.imshow('Coleta de Dados', frame_copy)
-                    cv2.waitKey(500)
+                else:
+                    cv2.putText(frame, "Mao nao detectada", (50, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
 
-                # Lógica para SAÍDA GRACIOSA
-                elif key == ord('q'):
+                cv2.imshow('Coleta de Dados', frame)
+
+                if cv2.waitKey(1) & 0xFF == ord('q'):
                     quit_program = True
                     break
 
-            # Escreve todos os dados da letra e força o salvamento no disco
-            writer.writerows(letter_data)
-            f.flush() # <-- PONTO CRÍTICO: Força a escrita dos dados no disco!
-            print(f"Dados da letra '{letter}' salvos com sucesso no CSV!")
+            if quit_program: break
 
-            if quit_program:
-                print("Coleta interrompida pelo usuário.")
-                break # Sai do loop de letras
+            # Salvar os dados da letra em lote
+            if letter_data:
+                writer.writerows(letter_data)
+                print(f"Dados para a letra '{letter}' salvos com sucesso.")
 
 finally:
-    # Garante que a câmera e as janelas sejam liberadas
-    print("Finalizando o programa e liberando recursos.")
     cap.release()
     cv2.destroyAllWindows()
+    print("\nColeta de dados finalizada. Recursos liberados.")
+    print(f"O dataset foi salvo em: '{CSV_FILE}'")

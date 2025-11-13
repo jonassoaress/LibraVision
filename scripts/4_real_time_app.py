@@ -5,7 +5,8 @@ import joblib
 import os
 
 # Carrega o modelo treinado
-MODEL_PATH = os.path.join('../models', 'libras_model.pkl')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(SCRIPT_DIR, '..', 'models', 'libras_model.pkl')
 model = joblib.load(MODEL_PATH)
 
 # Inicializa o MediaPipe Hands

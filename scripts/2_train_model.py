@@ -6,8 +6,9 @@ import joblib
 import os
 
 # Caminho para o dataset e para salvar o modelo
-DATA_FILE = '../data/libras_data.csv'
-MODEL_DIR = '../models'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(SCRIPT_DIR, '..', 'data', 'libras_data.csv')
+MODEL_DIR = os.path.join(SCRIPT_DIR, '..', 'models')
 MODEL_PATH = os.path.join(MODEL_DIR, 'libras_model.pkl')
 
 if not os.path.exists(MODEL_DIR):

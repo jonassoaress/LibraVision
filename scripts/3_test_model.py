@@ -7,8 +7,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Caminho para o dataset e para carregar o modelo
-DATA_FILE = '../data/libras_data.csv'
-MODEL_DIR = '../models'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(SCRIPT_DIR, '..', 'data', 'libras_data.csv')
+MODEL_DIR = os.path.join(SCRIPT_DIR, '..', 'models')
 MODEL_PATH = os.path.join(MODEL_DIR, 'libras_model.pkl')
 
 # 1. Carregar os dados
