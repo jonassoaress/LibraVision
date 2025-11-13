@@ -105,3 +105,7 @@ python scripts/4_real_time_app.py
 ```
 
 Pressione a tecla **'q'** na janela da câmera para fechar a aplicação
+
+---
+
+**Nota:** Projeto para fins acadêmicos e de estudos
