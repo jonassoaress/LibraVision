@@ -18,26 +18,46 @@ if not os.path.exists(MODEL_DIR):
 print("Carregando o dataset...")
 df = pd.read_csv(DATA_FILE)
 
-# 2. Preparar os dados
+# 2. Engenharia de Features: Normalização
+print("Realizando engenharia de features (normalização)...")
+processed_data = []
+for index, row in df.iterrows():
+    label = row['label']
+    landmarks = row.drop('label').values.reshape(21, 3) # Transforma de volta para 21x3
+
+    # Pega as coordenadas do pulso (ponto 0)
+    wrist_coords = landmarks[0]
+
+    # Subtrai as coordenadas do pulso de todos os outros pontos
+    relative_landmarks = landmarks - wrist_coords
+
+    # Achata a lista para o formato original e adiciona o label
+    processed_data.append([label] + relative_landmarks.flatten().tolist())
+
+# Cria um novo DataFrame com os dados processados
+columns = ['label'] + [f'{i}_{axis}' for i in range(21) for axis in ['x', 'y', 'z']]
+processed_df = pd.DataFrame(processed_data, columns=columns)
+
+# 3. Preparar os dados para treino e teste
 # X são as features (coordenadas), y é o label (letra)
-X = df.drop('label', axis=1)
-y = df['label']
+X = processed_df.drop('label', axis=1)
+y = processed_df['label']
 
 print("Dividindo os dados em treino e teste...")
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# 3. Treinar o modelo
+# 4. Treinar o modelo
 print("Treinando o modelo Random Forest...")
-model = RandomForestClassifier(n_estimators=100, random_state=42)
+model = RandomForestClassifier(n_estimators=150, random_state=42, max_depth=20, min_samples_leaf=5)
 model.fit(X_train, y_train)
 
-# 4. Avaliar o modelo
+# 5. Avaliar o modelo
 print("Avaliando a precisão do modelo...")
 y_pred = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 print(f'Precisão do modelo: {accuracy * 100:.2f}%')
 
-# 5. Salvar o modelo treinado
+# 6. Salvar o modelo treinado
 print(f"Salvando o modelo em {MODEL_PATH}...")
 joblib.dump(model, MODEL_PATH)
 

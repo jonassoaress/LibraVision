@@ -3,7 +3,6 @@ import os
 import cv2
 import csv
 import numpy as np
-import time
 
 # --- CAMINHOS E CONFIGURAÇÕES ---
 # Obtém o caminho absoluto para o diretório onde o script está localizado
