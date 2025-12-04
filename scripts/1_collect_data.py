@@ -12,7 +12,7 @@ DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data")
 
 # Alfabeto completo de Libras
 LETTERS_TO_COLLECT = "ABCDEFGHIJKLMNOPQRSTUVWXYZÇ"
-NUM_SAMPLES = 40  # 40 amostras por letra
+NUM_SAMPLES = 100  # 40 amostras por letra
 PREPARATION_TIME = 10  # 10 segundos para se preparar
 
 CSV_FILE = os.path.join(DATA_DIR, "libras_data.csv")
@@ -22,11 +22,11 @@ CSV_FILE = os.path.join(DATA_DIR, "libras_data.csv")
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# Inicializa o MediaPipe Hands
+# Inicializa o MediaPipe Hands (agora suporta até 2 mãos)
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1,
+    max_num_hands=2,
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5,
 )
@@ -58,15 +58,21 @@ print("Pressione 'q' a qualquer momento para interromper.")
 # Flag para saída do programa
 quit_program = False
 
-# Abre o arquivo CSV em modo de escrita ('w')
+# Verifica se o arquivo já existe para decidir sobre o cabeçalho
+file_exists = os.path.exists(CSV_FILE)
+
+# Abre o arquivo CSV em modo de append ('a') para não sobrescrever dados
 try:
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        # Escreve o cabeçalho
-        header = ["label"] + [
-            f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]
-        ]
-        writer.writerow(header)
+
+        # Escreve o cabeçalho apenas se o arquivo não existia
+        if not file_exists:
+            # agora inclui coluna 'hand' para identificar a mão
+            header = ["label", "hand"] + [
+                f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]
+            ]
+            writer.writerow(header)
 
         # Loop principal para cada letra
         for letter in LETTERS_TO_COLLECT:
@@ -131,35 +137,44 @@ try:
                 )
 
                 if results.multi_hand_landmarks:
-                    mp_drawing.draw_landmarks(
-                        frame,
-                        results.multi_hand_landmarks[0],
-                        mp_hands.HAND_CONNECTIONS,
-                    )
-
-                    # Extrai, adiciona à lista de memória e incrementa
-                    landmarks = (
-                        np.array(
-                            [
-                                [lm.x, lm.y, lm.z]
-                                for lm in results.multi_hand_landmarks[0].landmark
-                            ]
+                    # Processa todas as mãos detectadas
+                    for hand_idx, hand_landmarks in enumerate(
+                        results.multi_hand_landmarks
+                    ):
+                        mp_drawing.draw_landmarks(
+                            frame,
+                            hand_landmarks,
+                            mp_hands.HAND_CONNECTIONS,
                         )
-                        .flatten()
-                        .tolist()
-                    )
-                    letter_data.append([letter] + landmarks)
-                    sample_count += 1
-                    cv2.putText(
-                        frame,
-                        "COLETANDO...",
-                        (50, 130),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
+
+                        # Identifica se é mão esquerda ou direita
+                        hand_label = (
+                            results.multi_handedness[hand_idx].classification[0].label
+                        )
+
+                        # Extrai landmarks
+                        landmarks = (
+                            np.array(
+                                [[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark]
+                            )
+                            .flatten()
+                            .tolist()
+                        )
+
+                        # Adiciona à lista com label da letra e mão
+                        letter_data.append([letter, hand_label] + landmarks)
+                        sample_count += 1
+
+                        cv2.putText(
+                            frame,
+                            f"COLETANDO ({hand_label})...",
+                            (50, 130 + hand_idx * 40),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 255, 255),
+                            2,
+                            cv2.LINE_AA,
+                        )
 
                 else:
                     cv2.putText(
