@@ -40,9 +40,11 @@ if len(df) < 50:
 print("Realizando engenharia de features (normalização)...")
 processed_data = []
 for index, row in df.iterrows():
-    label = row['label']
-    # Remover 'label' e 'hand' para obter apenas as coordenadas
-    landmarks = row.drop(['label', 'hand']).values.reshape(21, 3)
+    label = row["label"]
+    hand = row["hand"]
+    landmarks = row.drop(["label", "hand"]).values.reshape(
+        21, 3
+    )  # Transforma de volta para 21x3
 
     # Pega as coordenadas do pulso (ponto 0)
     wrist_coords = landmarks[0]
@@ -50,16 +52,21 @@ for index, row in df.iterrows():
     # Subtrai as coordenadas do pulso de todos os outros pontos
     relative_landmarks = landmarks - wrist_coords
 
-    # Achata a lista para o formato original e adiciona o label
-    processed_data.append([label] + relative_landmarks.flatten().tolist())
+    # Achata a lista para o formato original e adiciona o label e mão
+    processed_data.append([label, hand] + relative_landmarks.flatten().tolist())
 
 # Cria um novo DataFrame com os dados processados
-columns = ["label"] + [f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]]
+columns = ["label", "hand"] + [
+    f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]
+]
 processed_df = pd.DataFrame(processed_data, columns=columns)
 
 # 3. Preparar os dados para treino e teste
-# X são as features (coordenadas), y é o label (letra)
-X = processed_df.drop("label", axis=1)
+# X são as features (coordenadas + hand), y é o label (letra)
+# Codifica a coluna 'hand' como feature numérica (Left=0, Right=1)
+X = processed_df.drop("label", axis=1).copy()
+X["hand_encoded"] = (X["hand"] == "Right").astype(int)
+X = X.drop("hand", axis=1)
 y = processed_df["label"]
 
 print("Dividindo os dados em treino e teste...")
@@ -98,7 +105,7 @@ grid_search = GridSearchCV(
 
 grid_search.fit(X_train, y_train)
 
-print(f"\nMelhores hiperparâmetros encontrados:")
+print("\nMelhores hiperparâmetros encontrados:")
 for param, value in grid_search.best_params_.items():
     print(f"  {param}: {value}")
 print(f"Melhor precisão no treino (CV): {grid_search.best_score_ * 100:.2f}%")
@@ -117,7 +124,7 @@ print(f"\nSalvando o modelo em {MODEL_PATH}...")
 try:
     joblib.dump(model, MODEL_PATH)
     print("Treinamento concluído e modelo salvo com sucesso!")
-    print(f"\nPróximos passos:")
+    print("\nPróximos passos:")
     print("  1. Execute '3_test_model.py' para avaliar o modelo (opcional)")
     print("  2. Execute '4_real_time_app.py' para usar o reconhecimento em tempo real")
 except Exception as e:

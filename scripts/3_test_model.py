@@ -32,9 +32,9 @@ except Exception as e:
 print("Realizando engenharia de features (normalização)...")
 processed_data = []
 for index, row in df.iterrows():
-    label = row['label']
-    # Remover 'label' e 'hand' para obter apenas as coordenadas
-    landmarks = row.drop(['label', 'hand']).values.reshape(21, 3)
+    label = row["label"]
+    hand = row["hand"]
+    landmarks = row.drop(["label", "hand"]).values.reshape(21, 3)
 
     # Pega as coordenadas do pulso (ponto 0)
     wrist_coords = landmarks[0]
@@ -42,32 +42,20 @@ for index, row in df.iterrows():
     # Subtrai as coordenadas do pulso de todos os outros pontos
     relative_landmarks = landmarks - wrist_coords
 
-    # Achata a lista para o formato original e adiciona o label
-    processed_data.append([label] + relative_landmarks.flatten().tolist())
+    # Achata a lista para o formato original e adiciona o label e mão
+    processed_data.append([label, hand] + relative_landmarks.flatten().tolist())
 
 # Cria um novo DataFrame com os dados processados
-columns = ['label'] + [f'{i}_{axis}' for i in range(21) for axis in ['x', 'y', 'z']]
+columns = ["label", "hand"] + [
+    f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]
+]
 processed_df = pd.DataFrame(processed_data, columns=columns)
 
 # 3. Preparar os dados
-X = processed_df.drop('label', axis=1)
-y = processed_df['label']
-
-    # Pega as coordenadas do pulso (ponto 0)
-    wrist_coords = landmarks[0]
-
-    # Subtrai as coordenadas do pulso de todos os outros pontos
-    relative_landmarks = landmarks - wrist_coords
-
-    # Achata a lista para o formato original e adiciona o label
-    processed_data.append([label] + relative_landmarks.flatten().tolist())
-
-# Cria um novo DataFrame com os dados processados
-columns = ["label"] + [f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]]
-processed_df = pd.DataFrame(processed_data, columns=columns)
-
-# 3. Preparar os dados
-X = processed_df.drop("label", axis=1)
+# Codifica a coluna 'hand' como feature numérica (Left=0, Right=1)
+X = processed_df.drop("label", axis=1).copy()
+X["hand_encoded"] = (X["hand"] == "Right").astype(int)
+X = X.drop("hand", axis=1)
 y = processed_df["label"]
 
 # 4. Dividir os dados em treino e teste
@@ -109,12 +97,21 @@ print(classification_report(y_test, y_pred))
 print("Gerando a Matriz de Confusão...")
 cm = confusion_matrix(y_test, y_pred, labels=model.classes_)
 plt.figure(figsize=(12, 10))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=model.classes_, yticklabels=model.classes_)
-plt.title('Matriz de Confusão')
-plt.ylabel('Verdadeiro')
-plt.xlabel('Previsto')
-CONFUSION_MATRIX_PATH = os.path.join(MODEL_DIR, 'confusion_matrix.png')
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=model.classes_,
+    yticklabels=model.classes_,
+)
+plt.title("Matriz de Confusão")
+plt.ylabel("Verdadeiro")
+plt.xlabel("Previsto")
+CONFUSION_MATRIX_PATH = os.path.join(MODEL_DIR, "confusion_matrix.png")
 plt.savefig(CONFUSION_MATRIX_PATH)
 plt.show()
 
-print(f"\nAnálise concluída. Gráfico da Matriz de Confusão salvo em '{CONFUSION_MATRIX_PATH}'.")
+print(
+    f"\nAnálise concluída. Gráfico da Matriz de Confusão salvo em '{CONFUSION_MATRIX_PATH}'."
+)
