@@ -16,9 +16,30 @@ MODEL_PATH = os.path.join(MODEL_DIR, 'libras_model.pkl')
 print("Carregando o dataset...")
 df = pd.read_csv(DATA_FILE)
 
-# 2. Preparar os dados
-X = df.drop('label', axis=1)
-y = df['label']
+# 2. Engenharia de Features: Normalização (mesmo processo do treinamento)
+print("Realizando engenharia de features (normalização)...")
+processed_data = []
+for index, row in df.iterrows():
+    label = row['label']
+    # Remover 'label' e 'hand' para obter apenas as coordenadas
+    landmarks = row.drop(['label', 'hand']).values.reshape(21, 3)
+
+    # Pega as coordenadas do pulso (ponto 0)
+    wrist_coords = landmarks[0]
+
+    # Subtrai as coordenadas do pulso de todos os outros pontos
+    relative_landmarks = landmarks - wrist_coords
+
+    # Achata a lista para o formato original e adiciona o label
+    processed_data.append([label] + relative_landmarks.flatten().tolist())
+
+# Cria um novo DataFrame com os dados processados
+columns = ['label'] + [f'{i}_{axis}' for i in range(21) for axis in ['x', 'y', 'z']]
+processed_df = pd.DataFrame(processed_data, columns=columns)
+
+# 3. Preparar os dados
+X = processed_df.drop('label', axis=1)
+y = processed_df['label']
 
 # 3. Dividir os dados em treino e teste
 _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
@@ -52,7 +73,8 @@ sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=model.classes_, y
 plt.title('Matriz de Confusão')
 plt.ylabel('Verdadeiro')
 plt.xlabel('Previsto')
-plt.savefig('../models/confusion_matrix.png')
+CONFUSION_MATRIX_PATH = os.path.join(MODEL_DIR, 'confusion_matrix.png')
+plt.savefig(CONFUSION_MATRIX_PATH)
 plt.show()
 
-print("\nAnálise concluída. Gráfico da Matriz de Confusão salvo em 'models/confusion_matrix.png'.")
+print(f"\nAnálise concluída. Gráfico da Matriz de Confusão salvo em '{CONFUSION_MATRIX_PATH}'.")

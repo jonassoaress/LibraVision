@@ -23,7 +23,8 @@ print("Realizando engenharia de features (normalização)...")
 processed_data = []
 for index, row in df.iterrows():
     label = row['label']
-    landmarks = row.drop('label').values.reshape(21, 3) # Transforma de volta para 21x3
+    # Remover 'label' e 'hand' para obter apenas as coordenadas
+    landmarks = row.drop(['label', 'hand']).values.reshape(21, 3)
 
     # Pega as coordenadas do pulso (ponto 0)
     wrist_coords = landmarks[0]
