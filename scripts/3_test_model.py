@@ -1,20 +1,32 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-import joblib
 import os
-import seaborn as sns
+
+import joblib
 import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
 
 # Caminho para o dataset e para carregar o modelo
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(SCRIPT_DIR, '..', 'data', 'libras_data.csv')
-MODEL_DIR = os.path.join(SCRIPT_DIR, '..', 'models')
-MODEL_PATH = os.path.join(MODEL_DIR, 'libras_model.pkl')
+DATA_FILE = os.path.join(SCRIPT_DIR, "..", "data", "libras_data.csv")
+MODEL_DIR = os.path.join(SCRIPT_DIR, "..", "models")
+MODEL_PATH = os.path.join(MODEL_DIR, "libras_model.pkl")
 
 # 1. Carregar os dados
 print("Carregando o dataset...")
-df = pd.read_csv(DATA_FILE)
+try:
+    df = pd.read_csv(DATA_FILE)
+    print(f"Dataset carregado com sucesso: {len(df)} amostras encontradas.")
+except FileNotFoundError:
+    print(f"ERRO: Dataset não encontrado em: {DATA_FILE}")
+    print(
+        "Por favor, execute o script '1_collect_data.py' primeiro para coletar os dados."
+    )
+    exit(1)
+except Exception as e:
+    print(f"ERRO ao carregar o dataset: {e}")
+    exit(1)
 
 # 2. Engenharia de Features: Normalização (mesmo processo do treinamento)
 print("Realizando engenharia de features (normalização)...")
@@ -41,25 +53,53 @@ processed_df = pd.DataFrame(processed_data, columns=columns)
 X = processed_df.drop('label', axis=1)
 y = processed_df['label']
 
-# 3. Dividir os dados em treino e teste
-_, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    # Pega as coordenadas do pulso (ponto 0)
+    wrist_coords = landmarks[0]
 
-# 4. Carregar o modelo treinado
+    # Subtrai as coordenadas do pulso de todos os outros pontos
+    relative_landmarks = landmarks - wrist_coords
+
+    # Achata a lista para o formato original e adiciona o label
+    processed_data.append([label] + relative_landmarks.flatten().tolist())
+
+# Cria um novo DataFrame com os dados processados
+columns = ["label"] + [f"{i}_{axis}" for i in range(21) for axis in ["x", "y", "z"]]
+processed_df = pd.DataFrame(processed_data, columns=columns)
+
+# 3. Preparar os dados
+X = processed_df.drop("label", axis=1)
+y = processed_df["label"]
+
+# 4. Dividir os dados em treino e teste
+_, X_test, _, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# 5. Carregar o modelo treinado
 print(f"Carregando o modelo de {MODEL_PATH}...")
-if not os.path.exists(MODEL_PATH):
-  print(f"Erro: Modelo não encontrado em {MODEL_PATH}")
-  print("Por favor, execute o script '2_train_model.py' primeiro para treinar o modelo.")
-  exit(1)
+try:
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"Modelo não encontrado em {MODEL_PATH}")
 
-model = joblib.load(MODEL_PATH)
+    model = joblib.load(MODEL_PATH)
+    print("Modelo carregado com sucesso!")
+except FileNotFoundError:
+    print(f"ERRO: Modelo não encontrado em {MODEL_PATH}")
+    print(
+        "Por favor, execute o script '2_train_model.py' primeiro para treinar o modelo."
+    )
+    exit(1)
+except Exception as e:
+    print(f"ERRO ao carregar o modelo: {e}")
+    exit(1)
 
-# 5. Fazer previsões no conjunto de teste
+# 6. Fazer previsões no conjunto de teste
 print("Fazendo previsões no conjunto de teste...")
 y_pred = model.predict(X_test)
 
-# 6. Avaliar o modelo
+# 7. Avaliar o modelo
 accuracy = accuracy_score(y_test, y_pred)
-print(f'Precisão do modelo no conjunto de teste: {accuracy * 100:.2f}%\n')
+print(f"Precisão do modelo no conjunto de teste: {accuracy * 100:.2f}%\n")
 
 # Relatório de classificação (Precisão, Recall, F1-Score)
 print("Relatório de Classificação:")
