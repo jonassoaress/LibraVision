@@ -23,17 +23,17 @@ except Exception as e:
     print(f"ERRO ao carregar o modelo: {e}")
     exit(1)
 
-# Inicializa o MediaPipe Hands e Webcam
+# Inicializa o MediaPipe Hands e Webcam (agora suporta até 2 mãos)
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1,
+    max_num_hands=2,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7,
 )
 mp_drawing = mp.solutions.drawing_utils
 
-# Inicializa a webcam com tratamento de erros
+# Inicializa a webcam com tratamento de erros e resolução aumentada
 cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
@@ -44,6 +44,10 @@ if not cap.isOpened():
     print("  - Você tem permissões para acessar a câmera")
     exit(1)
 
+# Define uma resolução maior (1280x720 - HD)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
 # Testa se consegue ler um frame
 ret, test_frame = cap.read()
 if not ret:
@@ -53,12 +57,20 @@ if not ret:
 
 print("Câmera inicializada com sucesso!")
 print("Pressione 'q' para sair da aplicação.")
+print("Pressione 'f' para alternar entre tela cheia e janela.")
 
-# Lógica de suavização
+# Lógica de suavização para cada mão
 PREDICTION_BUFFER_SIZE = 10  # Analisa as últimas 10 previsões
 CONFIDENCE_THRESHOLD = 0.8  # Confiança mínima para considerar a previsão
-prediction_buffer = deque(maxlen=PREDICTION_BUFFER_SIZE)
-stable_prediction = ""
+prediction_buffer_left = deque(maxlen=PREDICTION_BUFFER_SIZE)
+prediction_buffer_right = deque(maxlen=PREDICTION_BUFFER_SIZE)
+stable_prediction_left = ""
+stable_prediction_right = ""
+
+# Controle de tela cheia
+is_fullscreen = False
+window_name = "LibraVision"
+cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -76,7 +88,11 @@ while cap.isOpened():
     result = hands.process(rgb_frame)
 
     if result.multi_hand_landmarks:
-        for hand_landmarks in result.multi_hand_landmarks:
+        # Processa todas as mãos detectadas
+        for hand_idx, hand_landmarks in enumerate(result.multi_hand_landmarks):
+            # Identifica se é mão esquerda ou direita
+            hand_label = result.multi_handedness[hand_idx].classification[0].label
+
             # Desenha os pontos e conexões na mão
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
@@ -88,11 +104,23 @@ while cap.isOpened():
             relative_landmarks = landmarks_raw - wrist_coords
             landmarks_for_model = relative_landmarks.flatten().tolist()
 
+            # Adiciona a feature de qual mão (Left=0, Right=1)
+            hand_encoded = 1 if hand_label == "Right" else 0
+            landmarks_for_model.append(hand_encoded)
+
             # Faz a previsão com o modelo
             prediction_probs = model.predict_proba([landmarks_for_model])[0]
             confidence = np.max(prediction_probs)
             predicted_class_index = np.argmax(prediction_probs)
             predicted_letter = model.classes_[predicted_class_index]
+
+            # Seleciona o buffer correto para a mão
+            if hand_label == "Left":
+                prediction_buffer = prediction_buffer_left
+                y_pos = 50
+            else:
+                prediction_buffer = prediction_buffer_right
+                y_pos = 100
 
             # Adiciona ao buffer apenas se a confiança for alta o suficiente
             if confidence >= CONFIDENCE_THRESHOLD:
@@ -100,46 +128,80 @@ while cap.isOpened():
 
             # Verifica se há uma previsão estável no buffer
             if len(prediction_buffer) == PREDICTION_BUFFER_SIZE:
-                # A predição estável é a que mais aparece no buffer (usando Counter para eficiência)
+                # A predição estável é a que mais aparece no buffer
                 counter = Counter(prediction_buffer)
                 most_common, count = counter.most_common(1)[0]
                 if count > PREDICTION_BUFFER_SIZE * 0.7:
-                    stable_prediction = most_common
+                    if hand_label == "Left":
+                        stable_prediction_left = most_common
+                    else:
+                        stable_prediction_right = most_common
 
             # Exibe a confiança e a letra prevista (instável)
             cv2.putText(
                 frame,
-                f"Pred: {predicted_letter} ({confidence:.2f})",
-                (50, 50),
+                f"{hand_label}: {predicted_letter} ({confidence:.2f})",
+                (50, y_pos),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                1,
+                0.8,
                 (255, 255, 0),
                 2,
                 cv2.LINE_AA,
             )
     else:
-        # Limpa o buffer quando não há mão detectada
-        prediction_buffer.clear()
+        # Limpa os buffers quando não há mão detectada
+        prediction_buffer_left.clear()
+        prediction_buffer_right.clear()
 
-    # Exibe o frame
-    # Exibe a predição ESTÁVEL em destaque
-    cv2.rectangle(frame, (40, 400), (600, 460), (0, 0, 0), -1)
+    # Obtém as dimensões do frame para posicionar elementos dinamicamente
+    frame_height, frame_width = frame.shape[:2]
+
+    # Exibe as predições ESTÁVEIS em destaque (posicionamento adaptativo)
+    box_y = frame_height - 180
+    cv2.rectangle(
+        frame, (40, box_y), (int(frame_width * 0.5), box_y + 150), (0, 0, 0), -1
+    )
     cv2.putText(
         frame,
-        f"Letra Estavel: {stable_prediction}",
-        (50, 440),
+        f"Mao Esquerda: {stable_prediction_left}",
+        (50, box_y + 50),
         cv2.FONT_HERSHEY_SIMPLEX,
         1.5,
-        (255, 255, 255),
+        (0, 255, 0),
+        3,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        f"Mao Direita: {stable_prediction_right}",
+        (50, box_y + 110),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.5,
+        (0, 255, 255),
         3,
         cv2.LINE_AA,
     )
 
-    cv2.imshow("LibraVision", frame)
+    cv2.imshow(window_name, frame)
+
+    # Captura teclas
+    key = cv2.waitKey(1) & 0xFF
 
     # Pressione 'q' para sair
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    if key == ord("q"):
         break
+
+    # Pressione 'f' para alternar tela cheia
+    elif key == ord("f"):
+        is_fullscreen = not is_fullscreen
+        if is_fullscreen:
+            cv2.setWindowProperty(
+                window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN
+            )
+        else:
+            cv2.setWindowProperty(
+                window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL
+            )
 
 cap.release()
 cv2.destroyAllWindows()
